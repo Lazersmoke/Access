@@ -64,6 +64,7 @@ tripleSecond = Access (\(_,b,_) -> b) (\f (a,b,c) -> (a,f b,c))
 
 tripleThrid :: (a,b,c) ~> c
 tripleThrid = Access (\(_,_,c) -> c) (\f (a,b,c) -> (a,b,f c))
+
 {-
 Example of how to set up your own datatype to work with accessors:
 
