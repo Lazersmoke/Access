@@ -30,7 +30,7 @@ grab (Access g _) = g
 lift,(>&>) :: w ~> p -> (p -> p) -> w -> w
 lift (Access _ l) = l
 (>&>) = lift
-infixl 6 >&>
+infixr 6 >&>
 
 liftMap :: Functor f => w ~> (f p) -> (p -> p) -> w -> w
 liftMap a f = a >&> fmap f
