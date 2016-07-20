@@ -32,7 +32,7 @@ lift (Access _ l) = l
 (>&>) = lift
 infixr 6 >&>
 
-liftMap :: Functor f => w ~> (f p) -> (p -> p) -> w -> w
+liftMap :: Functor f => w ~> f p -> (p -> p) -> w -> w
 liftMap a f = a >&> fmap f
 
 set,(>@>) :: w ~> p -> p -> w -> w
@@ -42,6 +42,11 @@ set a n = a >&> const n
 -- Accessors for lists, tuples, etc
 whole :: a ~> a
 whole = Access id id
+
+swizzle :: (a ~> b) -> (a ~> b) -> a -> a
+swizzle fromA toA input = toA >@> (fromA ~>> input) $ input
+-- swizzle = flip flip id . (ap .) . flip ((.) . set) . grab
+-- why not
 
 -- UNSAFE AF WARNING!
 headA :: [a] ~> a
