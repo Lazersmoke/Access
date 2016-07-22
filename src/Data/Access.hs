@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Data.Access where
 
 import Control.Category
@@ -46,6 +47,12 @@ instance Access a a Whole where
   grab _ = id
   lift _ = id
 
+-- This is why we have UndecidableInstances enabled: p is not needed in the instance head because it is skipped over, however it does need to be in the context so we can make sure it is the same
+data Compose a b = Compose a b
+instance (Access w p b, Access p s a) => Access w s (Compose a b) where
+  grab (Compose a b) = grab a . grab b
+  lift (Compose a b) f = b >&> (a >&> f)
+
 swizzle :: (Access w p a, Access w p b) => a -> b -> w -> w
 swizzle fromA toA input = toA >@> (fromA ~>> input) $ input
 -- swizzle = flip flip id . (ap .) . flip ((.) . set) . grab
@@ -87,6 +94,7 @@ data Third = Third
 instance Access (a,b,c) c Third where
   grab _ (_,_,z) = z
   lift _ f (x,y,z) = (x,y,f z)
+
 
 {-
 Example of how to set up your own datatype to work with accessors:
