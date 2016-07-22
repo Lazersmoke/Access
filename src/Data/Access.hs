@@ -1,10 +1,15 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Data.Access where
 
 import Control.Category
 import Prelude hiding (id,(.))
 
-data Access w p = Access (w -> p) ((p -> p) -> w -> w)
+class Access w p a | w a -> p where
+  grab :: a -> w -> p
+  lift :: a -> (p -> p) -> w -> w
+
 -- Access laws:
 --
 -- A: grab a . set a b $ x == b
@@ -12,63 +17,76 @@ data Access w p = Access (w -> p) ((p -> p) -> w -> w)
 --
 -- A: If you set something to a value, then get that something, it is that value
 -- B: If you set a value, then lift a function on it, then grab it, it should be the same as applying that function to the initial value
-
+{-
 instance Category Access where
   id = whole
   --(.) :: (b ~> c) -> (a ~> b) -> (a ~> c)
   (Access g2 l2) . (Access g1 l1) = Access (g2 . g1) (l1 . l2)
-
-type w ~> p = Access w p
-
-grab,(~>>) :: w ~> p -> w -> p
-grab (Access g _) = g
+-}
+(~>>) :: Access w p a => a -> w -> p
 (~>>) = grab
 
-(<<~) :: w -> w ~> p -> p
+(<<~) :: Access w p a => w -> a -> p
 (<<~) = flip grab
 
-lift,(>&>) :: w ~> p -> (p -> p) -> w -> w
-lift (Access _ l) = l
+(>&>) :: Access w p a => a -> (p -> p) -> w -> w
 (>&>) = lift
 infixr 6 >&>
 
-liftMap :: Functor f => w ~> f p -> (p -> p) -> w -> w
+liftMap :: (Access w (f p) a,Functor f) => a -> (p -> p) -> w -> w
 liftMap a f = a >&> fmap f
 
-set,(>@>) :: w ~> p -> p -> w -> w
+set,(>@>) :: Access w p a => a -> p -> w -> w
 set a n = a >&> const n
 (>@>) = set
 
 -- Accessors for lists, tuples, etc
-whole :: a ~> a
-whole = Access id id
+data Whole = Whole
+instance Access a a Whole where
+  grab _ = id
+  lift _ = id
 
-swizzle :: (a ~> b) -> (a ~> b) -> a -> a
+swizzle :: (Access w p a, Access w p b) => a -> b -> w -> w
 swizzle fromA toA input = toA >@> (fromA ~>> input) $ input
 -- swizzle = flip flip id . (ap .) . flip ((.) . set) . grab
 -- why not
 
--- UNSAFE AF WARNING!
-headA :: [a] ~> a
-headA = Access head (\f (x:xs) -> f x : xs)
+-- TODO: Check law satisfaction on AccessHead and AccessTail
+data AccessHead = AccessHead
+instance Monoid a => Access [a] a AccessHead where
+  grab _ (x:_) = x
+  grab _ [] = mempty 
+  lift _ f (x:xs) = f x : xs
+  lift _ _ [] = []
 
-tailA :: [a] ~> [a]
-tailA = Access tail (\f (x:xs) -> x : f xs)
+data AccessTail = AccessTail
+instance Access [a] [a] AccessTail where
+  grab _ (_:xs) = xs
+  grab _ [] = []
+  lift _ f (x:xs) = x : f xs
+  lift _ _ [] = []
 
-pairFirst :: (a,b) ~> a
-pairFirst = Access fst (\f (x,y) -> (f x,y))
+data First = First
+instance Access (a,b) a First where
+  grab _ = fst
+  lift _ f (x,y) = (f x,y)
 
-pairSecond :: (a,b) ~> b
-pairSecond = Access snd (\f (x,y) -> (x,f y))
+instance Access (a,b,c) a First where
+  grab _ (x,_,_) = x
+  lift _ f (x,y,z) = (f x,y,z)
 
-tripleFirst :: (a,b,c) ~> a
-tripleFirst = Access (\(a,_,_) -> a) (\f (a,b,c) -> (f a,b,c))
+data Second = Second
+instance Access (a,b) b Second where
+  grab _ = snd
+  lift _ f (x,y) = (x,f y)
+instance Access (a,b,c) b Second where
+  grab _ (_,y,_) = y
+  lift _ f (x,y,z) = (x,f y,z)
 
-tripleSecond :: (a,b,c) ~> b
-tripleSecond = Access (\(_,b,_) -> b) (\f (a,b,c) -> (a,f b,c))
-
-tripleThrid :: (a,b,c) ~> c
-tripleThrid = Access (\(_,_,c) -> c) (\f (a,b,c) -> (a,b,f c))
+data Third = Third
+instance Access (a,b,c) c Third where
+  grab _ (_,_,z) = z
+  lift _ f (x,y,z) = (x,y,f z)
 
 {-
 Example of how to set up your own datatype to work with accessors:
