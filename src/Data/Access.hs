@@ -4,9 +4,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Data.Access where
 
-import Control.Category
-import Prelude hiding (id,(.))
-
 class Access w p a | w a -> p where
   grab :: a -> w -> p
   lift :: a -> (p -> p) -> w -> w
@@ -77,7 +74,6 @@ data First = First
 instance Access (a,b) a First where
   grab _ = fst
   lift _ f (x,y) = (f x,y)
-
 instance Access (a,b,c) a First where
   grab _ (x,_,_) = x
   lift _ f (x,y,z) = (f x,y,z)
