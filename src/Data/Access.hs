@@ -50,6 +50,13 @@ instance (Access w p b, Access p s a) => Access w s (Compose a b) where
   grab (Compose a b) = grab a . grab b
   lift (Compose a b) f = b >&> (a >&> f)
 
+-- This is for explicity writing out your access functions, so you can do them inline, apply partially, etc
+data Explicate w p = Explicate (w -> p) ((p -> p) -> w -> w)
+instance Access w p (Explicate w p) where
+  grab (Explicate g _) = g
+  lift (Explicate _ l) = l
+
+-- Lets you swizzle different parts of the same type in the same whole type
 swizzle :: (Access w p a, Access w p b) => a -> b -> w -> w
 swizzle fromA toA input = toA >@> (fromA ~>> input) $ input
 -- swizzle = flip flip id . (ap .) . flip ((.) . set) . grab
@@ -103,9 +110,14 @@ data Kitten = Kit {
 -- You can probably Template Haskell away the rest, but here it is anyway:
 -- Beacuse I'm bad at TH :(
 
-kittenAge :: Kitten ~> Integer
-kittenAge = Access _age (\f k -> k {_age = f (_age k)})
+data Age = Age
+instance Access Kitten Integer Age where
+  grab _ = _age
+  lift _ f k = k {_age = f $ _age k}
 
-kittenName :: Kitten ~> String
-kittenName = Access _name (\f k -> k {_name = f (_name k)})
+data Name = Name
+instance Access Kitten String Name where
+  grab _ = _name
+  lift _ f k = k {_name = f $ _name k}
+
 -}
