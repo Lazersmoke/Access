@@ -5,6 +5,7 @@ import Control.Category
 import Prelude hiding (id,(.))
 
 data Access w p = Access (w -> p) ((p -> p) -> w -> w)
+
 -- Access laws:
 --
 -- A: grab a . set a b $ x == b
