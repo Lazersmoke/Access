@@ -62,41 +62,45 @@ swizzle fromA toA input = toA >@> (fromA ~>> input) $ input
 -- swizzle = flip flip id . (ap .) . flip ((.) . set) . grab
 -- why not
 
--- TODO: Check law satisfaction on AccessHead and AccessTail
-data AccessHead = AccessHead
-instance Monoid a => Access [a] a AccessHead where
-  grab _ (x:_) = x
-  grab _ [] = mempty 
-  lift _ f (x:xs) = f x : xs
-  lift _ _ [] = []
+data Zero = Zero
+data Succ z = Succ z
 
-data AccessTail = AccessTail
-instance Access [a] [a] AccessTail where
-  grab _ (_:xs) = xs
-  grab _ [] = []
-  lift _ f (x:xs) = x : f xs
-  lift _ _ [] = []
+type One = Succ Zero
+type Two = Succ One
+type Three = Succ Two
 
-data First = First
-instance Access (a,b) a First where
+-- Pairs:
+instance Access (a,b) a One where
   grab _ = fst
   lift _ f (x,y) = (f x,y)
-instance Access (a,b,c) a First where
-  grab _ (x,_,_) = x
-  lift _ f (x,y,z) = (f x,y,z)
-
-data Second = Second
-instance Access (a,b) b Second where
+instance Access (a,b) b Two where
   grab _ = snd
   lift _ f (x,y) = (x,f y)
-instance Access (a,b,c) b Second where
+
+-- Triples:
+instance Access (a,b,c) a One where
+  grab _ (x,_,_) = x
+  lift _ f (x,y,z) = (f x,y,z)
+instance Access (a,b,c) b Two where
   grab _ (_,y,_) = y
   lift _ f (x,y,z) = (x,f y,z)
-
-data Third = Third
-instance Access (a,b,c) c Third where
+instance Access (a,b,c) c Three where
   grab _ (_,_,z) = z
   lift _ f (x,y,z) = (x,y,f z)
+
+-- Four-Tuples:
+instance Access (a,b,c,d) a One where
+  grab _ (x,_,_,_) = x
+  lift _ f (x,y,z,w) = (f x,y,z,w)
+instance Access (a,b,c,d) b Two where
+  grab _ (_,y,_,_) = y
+  lift _ f (x,y,z,w) = (x,f y,z,w)
+instance Access (a,b,c,d) c Three where
+  grab _ (_,_,z,_) = z
+  lift _ f (x,y,z,w) = (x,y,f z,w)
+instance Access (a,b,c,d) d (Succ Three) where
+  grab _ (_,_,_,w) = w
+  lift _ f (x,y,z,w) = (x,y,z,f w)
 
 
 {-
