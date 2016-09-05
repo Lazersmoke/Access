@@ -1,19 +1,17 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 module Data.Access where
 
-class Access w p a | w a -> p
+class Grab w a where
+  type PartGrab w a :: *
+  grab :: a -> w -> PartGrab w a
 
-instance (Grab w p a, Lift w p a) => Access w p a
-
-class Grab w p a | w a -> p where
-  grab :: a -> w -> p
-
-class Lift w p a | w a -> p where
-  lift :: a -> (p -> p) -> w -> w
+class Lift w a where
+  type PartLift w a :: *
+  lift :: a -> (PartLift w a -> PartLift w a) -> w -> w
 
 
 -- Access laws:
@@ -29,49 +27,60 @@ instance Category Access where
   --(.) :: (b ~> c) -> (a ~> b) -> (a ~> c)
   (Access g2 l2) . (Access g1 l1) = Access (g2 . g1) (l1 . l2)
 -}
-(~>>) :: Grab w p a => a -> w -> p
+(~>>) :: (Grab w a, PartGrab w a ~ p) => a -> w -> p
 (~>>) = grab
 
-(<<~) :: Grab w p a => w -> a -> p
+(<<~) :: (Grab w a, PartGrab w a ~ p) => w -> a -> p
 (<<~) = flip grab
 
-(>&>) :: Lift w p a => a -> (p -> p) -> w -> w
+(>&>) :: (Lift w a, PartLift w a ~ p) => a -> (p -> p) -> w -> w
 (>&>) = lift
 infixr 6 >&>
 
-liftMap :: (Lift w (f p) a,Functor f) => a -> (p -> p) -> w -> w
+
+-- w is ([a],[b]) a is One p is a
+liftMap :: (Lift w a, PartLift w a ~ f p, Functor f) => a -> (p -> p) -> w -> w
 liftMap a f = a >&> fmap f
 
-set,(>@>) :: Lift w p a => a -> p -> w -> w
+set,(>@>) :: (Lift w a, PartLift w a ~ p) => a -> p -> w -> w
 set a n = a >&> const n
 (>@>) = set
 
 -- Accessors for lists, tuples, etc
 data Whole = Whole
-instance Grab a a Whole where
+instance Grab a Whole where
+  type PartGrab a Whole = a
   grab _ = id
-instance Lift a a Whole where
+instance Lift a Whole where
+  type PartLift a Whole = a
   lift _ = id
 
 -- This is why we have UndecidableInstances enabled: p is not needed in the instance head because it is skipped over, however it does need to be in the context so we can make sure it is the same
+{-
 data Compose a b = Compose a b
-instance (Grab w p b, Grab p s a) => Grab w s (Compose a b) where
+instance (Grab w b, PartGrab w b ~ p, Grab p a, PartGrab p a ~ s) => Grab w (Compose a b) where
+  type PartGrab w (Compose a b) = s
   grab (Compose a b) = grab a . grab b
-instance (Lift w p b, Lift p s a) => Lift w s (Compose a b) where
+instance (Lift w b, PartLift w b ~ p, Lift p a, PartLift p a ~ s) => Lift w (Compose a b) where
+  type PartLift w (Compose a b) = s
   lift (Compose a b) f = b >&> (a >&> f)
+-}
 
 -- This is for explicity writing out your access functions, so you can do them inline, apply partially, etc
-instance (w ~ w', p ~ p') => Grab w p (w' -> p') where
+instance w ~ w' => Grab w (w' -> p) where
+  type PartGrab w (w' -> p) = p
   grab = id
-instance (w ~ w', p ~ p', w ~ w'', p ~ p'') => Lift w p ((p' -> p'') -> w' -> w'') where
+instance (w ~ w', w ~ w'', p ~ p') => Lift w ((p -> p') -> w' -> w'') where
+  type PartLift w ((p -> p') -> w' -> w'') = p
   lift = id
 
 data Standard = Standard
-instance Functor f => Lift (f a) a Standard where
+instance Functor f => Lift (f a) Standard where
+  type PartLift (f a) Standard = a
   lift _ = fmap
 
 -- Lets you swizzle different parts of the same type in the same whole type
-swizzle :: (Grab w p a, Lift w p b) => a -> b -> w -> w
+swizzle :: (Grab w a, PartGrab w a ~ p, Lift w b, PartLift w b ~ p) => a -> b -> w -> w
 swizzle fromA toA input = toA >@> (fromA ~>> input) $ input
 -- swizzle = flip flip id . (ap .) . flip ((.) . set) . grab
 -- why not
@@ -90,51 +99,69 @@ three :: Three
 three = Succ two
 
 -- Pairs:
-instance Grab (a,b) a One where
+instance Grab (a,b) One where
+  type PartGrab (a,b) One = a
   grab _ = fst
-instance Lift (a,b) a One where
+instance Lift (a,b) One where
+  type PartLift (a,b) One = a
   lift _ f (x,y) = (f x,y)
 
-instance Grab (a,b) b Two where
+instance Grab (a,b) Two where
+  type PartGrab (a,b) Two = b
   grab _ = snd
-instance Lift (a,b) b Two where
+instance Lift (a,b) Two where
+  type PartLift (a,b) Two = b
   lift _ f (x,y) = (x,f y)
 
 -- Triples:
-instance Grab (a,b,c) a One where
+instance Grab (a,b,c) One where
+  type PartGrab (a,b,c) One = a
   grab _ (x,_,_) = x
-instance Lift (a,b,c) a One where
+instance Lift (a,b,c) One where
+  type PartLift (a,b,c) One = a
   lift _ f (x,y,z) = (f x,y,z)
 
-instance Grab (a,b,c) b Two where
+instance Grab (a,b,c) Two where
+  type PartGrab (a,b,c) Two = b
   grab _ (_,y,_) = y
-instance Lift (a,b,c) b Two where
+instance Lift (a,b,c) Two where
+  type PartLift (a,b,c) Two = b
   lift _ f (x,y,z) = (x,f y,z)
 
-instance Grab (a,b,c) c Three where
+instance Grab (a,b,c) Three where
+  type PartGrab (a,b,c) Three = c
   grab _ (_,_,z) = z
-instance Lift (a,b,c) c Three where
+instance Lift (a,b,c) Three where
+  type PartLift (a,b,c) Three = c
   lift _ f (x,y,z) = (x,y,f z)
 
 -- Four-Tuples:
-instance Grab (a,b,c,d) a One where
+instance Grab (a,b,c,d) One where
+  type PartGrab (a,b,c,d) One = a
   grab _ (x,_,_,_) = x
-instance Lift (a,b,c,d) a One where
+instance Lift (a,b,c,d) One where
+  type PartLift (a,b,c,d) One = a
   lift _ f (x,y,z,w) = (f x,y,z,w)
 
-instance Grab (a,b,c,d) b Two where
+instance Grab (a,b,c,d) Two where
+  type PartGrab (a,b,c,d) Two = b
   grab _ (_,y,_,_) = y
-instance Lift (a,b,c,d) b Two where
+instance Lift (a,b,c,d) Two where
+  type PartLift (a,b,c,d) Two = b
   lift _ f (x,y,z,w) = (x,f y,z,w)
 
-instance Grab (a,b,c,d) c Three where
+instance Grab (a,b,c,d) Three where
+  type PartGrab (a,b,c,d) Three = c
   grab _ (_,_,z,_) = z
-instance Lift (a,b,c,d) c Three where
+instance Lift (a,b,c,d) Three where
+  type PartLift (a,b,c,d) Three = c
   lift _ f (x,y,z,w) = (x,y,f z,w)
 
-instance Grab (a,b,c,d) d (Succ Three) where
+instance Grab (a,b,c,d) (Succ Three) where
+  type PartGrab (a,b,c,d) (Succ Three) = d
   grab _ (_,_,_,w) = w
-instance Lift (a,b,c,d) d (Succ Three) where
+instance Lift (a,b,c,d) (Succ Three) where
+  type PartLift (a,b,c,d) (Succ Three) = d
   lift _ f (x,y,z,w) = (x,y,z,f w)
 
 -- Fix instances: 
@@ -152,15 +179,19 @@ data Kitten = Kit {
 -- Beacuse I'm bad at TH :(
 
 data Age = Age
-instance Grab Kitten Integer Age where
+instance Grab Kitten Age where
+  type PartGrab Kitten Age = Integer
   grab _ = _age
-instance Lift Kitten Integer Age where
+instance Lift Kitten Age where
+  type PartLift Kitten Age = Integer
   lift _ f k = k {_age = f $ _age k}
 
 data Name = Name
-instance Grab Kitten String Name where
+instance Grab Kitten Name where
+  type PartGrab Kitten Name = String
   grab _ = _name
-instance Lift Kitten String Name where
+instance Lift Kitten Name where
+  type PartLift Kitten Name = String
   lift _ f k = k {_name = f $ _name k}
 
 -}
